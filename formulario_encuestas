@@ -1,0 +1,204 @@
+library(shiny)
+library(readr)
+library(dplyr)
+
+# --- 1. CONFIGURACIÓN INICIAL ---
+# Archivo donde se guardarán los datos.
+archivo_unico <- "lavanderias_productos_v3.csv"
+
+# Cargar investigadores desde archivo CSV.
+# Asegúrate de que la ruta sea correcta.
+investigadores <- read.csv("D:/ASANCHEZ/02_ASANCHEZ_2025/11_E.E_LAVANDERIA/INVESTIGADORES_INEI.csv",
+                           header = FALSE, stringsAsFactors = FALSE)[,1]
+
+# Cargar la tabla completa de Ubigeo (Departamento, Provincia, Distrito) desde tu archivo.
+# Se usa 'read.table' que es más robusto para archivos sin encabezados y con separadores de tabulación.
+ubigeo_data <- read.table("D:/ASANCHEZ/02_ASANCHEZ_2025/11_E.E_LAVANDERIA/distritos_peru.csv",
+                          header = FALSE, # El archivo no tiene encabezados
+                          sep = ";",     # El separador es una tabulación
+                          stringsAsFactors = FALSE)
+
+# Asignamos los nombres de las columnas manualmente.
+# Esto es crucial para que la lógica de la aplicación funcione.
+colnames(ubigeo_data) <- c("Departamento", "Provincia", "Distrito")
+
+# --- 2. INTERFAZ DE USUARIO (UI) ---
+ui <- fluidPage(
+  titlePanel("INEI: ENCUESTA ESPECIAL DE LAVANDERIAS NOVIEMBRE 2025"),
+  
+  tabsetPanel(
+    tabPanel("Datos del establecimiento",
+             h3("Datos del establecimiento"),
+             # Menú desplegable para Departamento
+             uiOutput("departamento_selector"),
+             # Menú desplegable para Provincia (generado dinámicamente)
+             uiOutput("provincia_selector"),
+             # Menú desplegable para Distrito (generado dinámicamente)
+             uiOutput("distrito_selector"),
+             
+             textInput("zona", "Zona"),
+             textInput("manzana", "Manzana"),
+             textInput("establecimiento", "Nombre del Establecimiento"),
+             textInput("cod_via", "Código de Vía"),
+             textInput("nom_via", "Nombre de Vía"),
+             textInput("num_puerta", "Número de Puerta"),
+             textInput("piso", "Piso"),
+             textInput("interior", "Interior"),
+             textInput("mz", "Mz"),
+             textInput("lt", "Lt"),
+             textInput("km", "Km"),
+             textInput("referencia", "Referencia"),
+             selectInput("investigador", "Investigador", choices = investigadores),
+             dateInput("fecha", "Fecha de visita", value = Sys.Date(), format = "dd-mm-yyyy",startview = "month",language = "es"),
+             textAreaInput("comentarios", "Comentarios")
+    ),
+    
+    tabPanel("Precios y Guardado",
+             h3("Precios de Productos"),
+             checkboxInput("no_precios", "No brindó información de precios", value = FALSE),
+             numericInput("precio1", "Lavado al seco (terno, saco y pantalón)", value = NA, min = 0, step = 0.1),
+             numericInput("precio2", "Lavado al agua (manta de algodón de 1.5 plazas)", value = NA, min = 0, step = 0.1),
+             numericInput("precio3", "Lavado al agua combinado (por kilogramo)", value = NA, min = 0, step = 0.1),
+             
+             actionButton("guardar", "Guardar todo"),
+             br(), br(),
+             verbatimTextOutput("id_lavanderia"),
+             tableOutput("tabla_final")
+    )
+  )
+)
+
+# --- 3. LÓGICA DEL SERVIDOR (SERVER) ---
+server <- function(input, output, session) {
+  # Variable para guardar el ID actual
+  id_actual <- reactiveVal(NULL)
+  
+  # Menú desplegable para Departamento, creado dinámicamente en el servidor.
+  output$departamento_selector <- renderUI({
+    selectInput("departamento_input", "Departamento", choices = unique(ubigeo_data$Departamento))
+  })
+  
+  # Filtra las provincias basándose en el departamento seleccionado.
+  provincias_filtradas <- reactive({
+    req(input$departamento_input)
+    ubigeo_data %>%
+      filter(Departamento == input$departamento_input) %>%
+      pull(Provincia) %>%
+      unique()
+  })
+  
+  # Crea dinámicamente el menú de provincia.
+  output$provincia_selector <- renderUI({
+    req(input$departamento_input)
+    selectInput("provincia_selector", "Provincia", choices = provincias_filtradas())
+  })
+  
+  # Filtra los distritos basándose en la provincia seleccionada.
+  distritos_filtrados <- reactive({
+    req(input$provincia_selector)
+    ubigeo_data %>%
+      filter(Provincia == input$provincia_selector) %>%
+      pull(Distrito) %>%
+      unique()
+  })
+  
+  # Crea dinámicamente el menú de distrito.
+  output$distrito_selector <- renderUI({
+    req(input$provincia_selector)
+    selectInput("distrito_selector", "Distrito", choices = distritos_filtrados())
+  })
+  
+  # Manejador del botón Guardar
+  observeEvent(input$guardar, {
+    # Validaciones
+    if (is.null(input$departamento_input) || is.null(input$provincia_selector) || 
+        is.null(input$distrito_selector) || is.null(input$investigador) || input$investigador == "") {
+      showModal(modalDialog("Faltan campos obligatorios (Departamento, Provincia, Distrito, Investigador).", easyClose = TRUE))
+      return()
+    }
+    
+    if (!input$no_precios) {
+      if (is.na(input$precio1) && is.na(input$precio2) && is.na(input$precio3)) {
+        showModal(modalDialog("Debe ingresar al menos un precio o marcar que no brindó información.", easyClose = TRUE))
+        return()
+      }
+    }
+    
+    # Genera el ID y guarda los datos
+    id <- paste0("L", as.integer(Sys.time()))
+    id_actual(id)
+    
+    productos <- data.frame(
+      id_lavanderia = character(),
+      producto = character(),
+      precio = numeric(),
+      stringsAsFactors = FALSE
+    )
+    
+    if (!input$no_precios) {
+      if (!is.na(input$precio1)) {
+        productos <- rbind(productos, data.frame(id_lavanderia = id, producto = "Lavado al seco (terno, saco y pantalón)", precio = input$precio1))
+      }
+      if (!is.na(input$precio2)) {
+        productos <- rbind(productos, data.frame(id_lavanderia = id, producto = "Lavado al agua (manta algodón 1.5 plazas)", precio = input$precio2))
+      }
+      if (!is.na(input$precio3)) {
+        productos <- rbind(productos, data.frame(id_lavanderia = id, producto = "Lavado al agua combinado (kg)", precio = input$precio3))
+      }
+    }
+    
+    datos_est <- data.frame(
+      id_lavanderia = id,
+      departamento = input$departamento_input,
+      provincia = input$provincia_selector,
+      distrito = input$distrito_selector,
+      zona = input$zona,
+      manzana = input$manzana,
+      establecimiento = input$establecimiento,
+      cod_via = input$cod_via,
+      nom_via = input$nom_via,
+      num_puerta = input$num_puerta,
+      piso = input$piso,
+      interior = input$interior,
+      mz = input$mz,
+      lt = input$lt,
+      km = input$km,
+      referencia = input$referencia,
+      investigador = input$investigador,
+      fecha = as.character(input$fecha),
+      comentarios = input$comentarios,
+      sin_precios = input$no_precios,
+      stringsAsFactors = FALSE
+    )
+    
+    final <- if (nrow(productos) == 0) datos_est else merge(datos_est, productos, by = "id_lavanderia", all = TRUE)
+    
+    if (!file.exists(archivo_unico)) {
+      write.csv(final, archivo_unico, row.names = FALSE)
+    } else {
+      write.table(final, archivo_unico, sep = ",", row.names = FALSE, col.names = FALSE, append = TRUE)
+    }
+    
+    output$id_lavanderia <- renderText({ paste("Lavandería registrada con ID:", id) })
+    output$tabla_final <- renderTable({ final })
+    
+    # Limpia los campos de texto después de guardar
+    campos_a_limpiar <- c("zona", "manzana", "establecimiento", "cod_via", "nom_via",
+                          "num_puerta", "piso", "interior", "mz", "lt", "km", "referencia", "comentarios")
+    for (campo in campos_a_limpiar) {
+      updateTextInput(session, campo, value = "")
+    }
+    
+    # Limpia los menús desplegables y otros campos
+    updateSelectInput(session, "investigador", selected = "")
+    # No es necesario limpiar los selectores de ubigeo, ya que se actualizan automáticamente
+    updateDateInput(session, "fecha", value = Sys.Date())
+    updateNumericInput(session, "precio1", value = NA)
+    updateNumericInput(session, "precio2", value = NA)
+    updateNumericInput(session, "precio3", value = NA)
+    updateCheckboxInput(session, "no_precios", value = FALSE)
+  })
+}
+
+shinyApp(ui, server)
+
