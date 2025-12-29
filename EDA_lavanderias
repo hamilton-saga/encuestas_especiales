@@ -1,0 +1,348 @@
+library(readxl)
+library(ggplot2)
+library(dplyr)
+library(knitr)
+
+df_lima <- read_excel("D:/ASANCHEZ/02_ASANCHEZ_2025/11_E.E_LAVANDERIA/01_LIMA METROPOLITANA/01_archivos_finales/DATA_LIMA_LAV_2025.xlsx", 
+                      sheet = "PRECIOS")
+
+names(df_lima)
+
+###############################################################################
+###############################################################################
+
+df_lima$precio <- as.numeric(as.character(df_lima$precio))
+
+# poner estadisticos
+
+frecuencia_producto <- df_lima %>%
+  group_by(producto) %>%
+  summarise(
+    articulo_f        = n(),
+    precio_promedio   = mean(precio, na.rm = TRUE),
+    precio_mediana    = median(precio, na.rm = TRUE),
+    precio_min        = min(precio, na.rm = TRUE),
+    precio_max        = max(precio, na.rm = TRUE),
+    #precio_rango      = precio_max - precio_min,
+    precio_sd         = sd(precio, na.rm = TRUE),
+    precio_cv         = precio_sd / precio_promedio,
+    #precio_q1         = quantile(PRECIO, 0.25, na.rm = TRUE),
+    #precio_q3         = quantile(PRECIO, 0.75, na.rm = TRUE),
+    # precio_iqr        = IQR(PRECIO, na.rm = TRUE),
+    # n_precios_unicos  = n_distinct(PRECIO, na.rm = TRUE)
+  ) %>%
+  arrange(desc(producto))
+
+# Ver el resultado
+print(frecuencia_producto)
+
+####################################################################
+
+ggplot(df_lima, aes(x = idpro, y = precio)) +
+  geom_boxplot(fill = "lightblue") +
+  
+  # Mediana
+  stat_summary(fun = median, geom = "text",
+               aes(label = round(..y.., 1)),
+               vjust = -0.5, color = "red", fontface = "bold") +
+  
+  # Mínimo
+  stat_summary(fun = min, geom = "text",
+               aes(label = round(..y.., 1)),
+               vjust = 1.5, color = "blue") +
+  
+  # Máximo
+  stat_summary(fun = max, geom = "text",
+               aes(label = round(..y.., 1)),
+               vjust = -1.2, color = "blue") +
+  
+  labs(
+    title = "Distribución de Precios por Producto",
+    x = "Producto",
+    y = "Precio"
+  ) +
+  theme_minimal() +
+  theme(
+    panel.grid = element_blank(),
+    panel.border = element_rect(color = "black", fill = NA, linewidth = 1),
+    scale_x_discrete(guide = guide_axis(n.dodge = 4)),
+        axis.text.x = element_text(size = 11, face = "bold")
+  )
+
+
+###################################################################
+
+ggplot(df_lima, aes(x = mes, y = precio, fill = producto)) +
+  geom_boxplot() +
+  labs(
+    title = "Comparación de precios por mes y producto",
+    x = "Mes",
+    y = "Precio"
+  ) +
+  theme_minimal()
+
+
+#################################################################
+
+ggplot(df_lima, aes(x = producto, y = precio, fill = mes)) +
+  geom_boxplot() +
+  labs(
+    title = "Comparación de precios por producto y mes",
+    x = "Producto",
+    y = "Precio"
+  ) +
+  theme_minimal() + 
+  theme(
+legend.position = "bottom")
+
+
+
+###############################################################################
+###############################################################################
+##################  FECHAS CAJAS COMPARATIVO  ########################
+
+df_lima$mes <- format(df_lima$fecha, "%B")
+
+ggplot(df_lima, aes(x = as.factor(mes), y = precio)) +
+  geom_boxplot(fill = "lightblue") +  # Cajas azul claro
+  labs(
+    title = "Comparación de Precios entre las Dos Encuestas",
+    x = "Fecha de Encuesta",
+    y = "Precio"
+  ) +
+  theme_minimal() +
+  theme(
+    panel.grid = element_blank(),  # Quitar cuadrículas
+    panel.border = element_rect(color = "black", fill = NA, linewidth = 1),  # Borde negro
+    axis.text.x = element_text(size = 11, face = "bold")  # Texto del eje X más grande y en negrita
+  )
+
+
+################# BOXPLOT CON DATOS DENTRO DE LA CAJA #####################################
+ggplot(df_lima, aes(x = mes, y = precio)) +
+  geom_boxplot(fill = "lightblue") +
+  
+  # Mediana
+  stat_summary(fun = median, geom = "text",
+               aes(label = round(..y.., 1)),
+               vjust = -0.5, color = "red", fontface = "bold") +
+  
+  # Mínimo
+  stat_summary(fun = min, geom = "text",
+               aes(label = round(..y.., 1)),
+               vjust = 1.5, color = "blue") +
+  
+  # Máximo
+  stat_summary(fun = max, geom = "text",
+               aes(label = round(..y.., 1)),
+               vjust = -1.2, color = "blue") +
+  
+  labs(
+    title = "Comparación de Precios entre las Dos Encuestas",
+    x = "Mes",
+    y = "Precio"
+  ) +
+  theme_minimal() +
+  theme(
+    panel.grid = element_blank(),
+    panel.border = element_rect(color = "black", fill = NA, linewidth = 1),
+    axis.text.x = element_text(size = 11, face = "bold")
+  )
+
+#################################################################
+df_A <- df_lima %>%
+  filter(idpro %in% c("C"))
+
+ggplot(df_A, aes(x = distrito, y = precio)) +
+  geom_boxplot(outlier.color = "black", fill = "lightcoral", color = "gray40") +
+  labs(
+    title = "Comparación de precios por producto y mes",
+    x = "Producto",
+    y = "Precio"
+  ) +
+  theme_minimal() + 
+ theme(
+  panel.grid.major = element_blank(),
+  panel.grid.minor = element_blank(),
+  panel.border = element_rect(colour = "black", fill = NA, size = 1),
+  plot.title = element_text(hjust = 0.5, face = "bold", size = 13),          # Título más grande y centrado
+  axis.text.x = element_text(angle = 90, hjust = 1, size = 10, face = "bold"), # Eje X más grande y negrita
+  axis.text.y = element_text(size = 10, face = "bold"),                       # Eje Y también en negrita
+  axis.title.x = element_text(size = 11, face = "bold"),                      # Etiqueta eje X
+  axis.title.y = element_text(size = 11, face = "bold")                       # Etiqueta eje Y
+)
+
+##############  CIUDADES  A NIVEL NACIONAL  ########################
+###################################################################
+
+df_ciudades <- read_excel("D:/ASANCHEZ/02_ASANCHEZ_2025/11_E.E_LAVANDERIA/02_CIUDADES/01_Archivos finales/data_lavanderias_ciudades_25.xlsx", 
+                                           sheet = "precios_juntos")
+
+names(df_ciudades)
+
+###############################################################################
+###############################################################################
+
+df_ciudades$precio <- as.numeric(as.character(df_ciudades$precio))
+
+# poner estadisticos
+
+frecuencia_producto <- df_ciudades %>%
+  group_by(producto) %>%
+  summarise(
+    articulo_f        = n(),
+    precio_promedio   = mean(precio, na.rm = TRUE),
+    precio_mediana    = median(precio, na.rm = TRUE),
+    precio_min        = min(precio, na.rm = TRUE),
+    precio_max        = max(precio, na.rm = TRUE),
+    #precio_rango      = precio_max - precio_min,
+    precio_sd         = sd(precio, na.rm = TRUE),
+    precio_cv         = precio_sd / precio_promedio,
+    #precio_q1         = quantile(PRECIO, 0.25, na.rm = TRUE),
+    #precio_q3         = quantile(PRECIO, 0.75, na.rm = TRUE),
+    # precio_iqr        = IQR(PRECIO, na.rm = TRUE),
+    # n_precios_unicos  = n_distinct(PRECIO, na.rm = TRUE)
+  ) %>%
+  arrange(desc(producto))
+
+# Ver el resultado
+print(frecuencia_producto)
+
+####################################################################
+
+ggplot(df_ciudades, aes(x = idpro, y = precio)) +
+  geom_boxplot(fill = "lightblue") +
+  
+  # Mediana
+  stat_summary(fun = median, geom = "text",
+               aes(label = round(..y.., 1)),
+               vjust = -0.5, color = "red", fontface = "bold") +
+  
+  # Mínimo
+  stat_summary(fun = min, geom = "text",
+               aes(label = round(..y.., 1)),
+               vjust = 1.5, color = "blue") +
+  
+  # Máximo
+  stat_summary(fun = max, geom = "text",
+               aes(label = round(..y.., 1)),
+               vjust = -1.2, color = "blue") +
+  
+  labs(
+    title = "Distribución de Precios por Producto",
+    x = "Producto",
+    y = "Precio"
+  ) +
+  theme_minimal() +
+  theme(
+    panel.grid = element_blank(),
+    panel.border = element_rect(color = "black", fill = NA, linewidth = 1),
+    scale_x_discrete(guide = guide_axis(n.dodge = 4)),
+    axis.text.x = element_text(size = 11, face = "bold")
+  )
+
+
+###################################################################
+
+ggplot(df_ciudades, aes(x = mes, y = precio, fill = producto)) +
+  geom_boxplot() +
+  labs(
+    title = "Comparación de precios por mes y producto",
+    x = "Mes",
+    y = "Precio"
+  ) +
+  theme_minimal()
+
+
+#################################################################
+
+ggplot(df_ciudades, aes(x = producto, y = precio, fill = mes)) +
+  geom_boxplot() +
+  labs(
+    title = "Comparación de precios por producto y mes",
+    x = "Producto",
+    y = "Precio"
+  ) +
+  theme_minimal() + 
+  theme(
+    legend.position = "bottom")
+
+
+
+###############################################################################
+###############################################################################
+##################  FECHAS CAJAS COMPARATIVO  ########################
+
+df_ciudades$mes <- format(df_ciudades$fecha, "%B")
+
+ggplot(df_ciudades, aes(x = as.factor(mes), y = precio)) +
+  geom_boxplot(fill = "lightblue") +  # Cajas azul claro
+  labs(
+    title = "Comparación de Precios entre las Dos Encuestas",
+    x = "Fecha de Encuesta",
+    y = "Precio"
+  ) +
+  theme_minimal() +
+  theme(
+    panel.grid = element_blank(),  # Quitar cuadrículas
+    panel.border = element_rect(color = "black", fill = NA, linewidth = 1),  # Borde negro
+    axis.text.x = element_text(size = 11, face = "bold")  # Texto del eje X más grande y en negrita
+  )
+
+
+################# BOXPLOT CON DATOS DENTRO DE LA CAJA #####################################
+ggplot(df_ciudades, aes(x = mes, y = precio)) +
+  geom_boxplot(fill = "lightblue") +
+  
+  # Mediana
+  stat_summary(fun = median, geom = "text",
+               aes(label = round(..y.., 1)),
+               vjust = -0.5, color = "red", fontface = "bold") +
+  
+  # Mínimo
+  stat_summary(fun = min, geom = "text",
+               aes(label = round(..y.., 1)),
+               vjust = 1.5, color = "blue") +
+  
+  # Máximo
+  stat_summary(fun = max, geom = "text",
+               aes(label = round(..y.., 1)),
+               vjust = -1.2, color = "blue") +
+  
+  labs(
+    title = "Comparación de Precios entre las Dos Encuestas",
+    x = "Mes",
+    y = "Precio"
+  ) +
+  theme_minimal() +
+  theme(
+    panel.grid = element_blank(),
+    panel.border = element_rect(color = "black", fill = NA, linewidth = 1),
+    axis.text.x = element_text(size = 11, face = "bold")
+  )
+
+#################################################################
+df_A <- df_ciudades %>%
+  filter(idpro %in% c("C"))
+
+ggplot(df_A, aes(x = ciudad, y = precio)) +
+  geom_boxplot(outlier.color = "black", fill = "lightcoral", color = "gray40") +
+  labs(
+    title = "Comparación de precios por producto y mes",
+    x = "Producto",
+    y = "Precio"
+  ) +
+  theme_minimal() + 
+  theme(
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    panel.border = element_rect(colour = "black", fill = NA, size = 1),
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 13),          # Título más grande y centrado
+    axis.text.x = element_text(angle = 90, hjust = 1, size = 10, face = "bold"), # Eje X más grande y negrita
+    axis.text.y = element_text(size = 10, face = "bold"),                       # Eje Y también en negrita
+    axis.title.x = element_text(size = 11, face = "bold"),                      # Etiqueta eje X
+    axis.title.y = element_text(size = 11, face = "bold")                       # Etiqueta eje Y
+  )
+
+###################################################################
+###################################################################
